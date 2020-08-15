@@ -14,12 +14,18 @@ typedef struct{
 	short y2;
 } VRECT;
 
-static VRECT playfield;
-static short hires_flag;
 static short soundflag;
 static short array3d32[7]={0x0,0x1,0x2,0x4,0x8,0x10,0x20};
-static short array3d54[4]={40,25,12,8};
-static short array3d64[2][7]={{30,184,28,11,32,192,80},{68,336,31,27,72,384,160}};
+
+typedef struct{
+	VRECT vrect;
+	short colordepth;
+	VRECT delta;
+	short score_x,score_y;
+	short score_w,score_h;
+	short score_textx,score_texty;
+	short score_pad;
+} BOARD_RENDER_T;
 
 static short board_state[450][4];
 static short board_state_all[450];
@@ -157,9 +163,9 @@ static void set_speed(short speed){
 	}
 }
 
-static void draw_worm_set_vdi_attributes(short color){
-	if(!hires_flag) {
-		vsl_width(vdi_handle,1);
+static void draw_worm_set_vdi_attributes(BOARD_RENDER_T* board, short color){
+	vsl_width(vdi_handle,board->vrect.x2>319?3:1);
+	if(board->colordepth>=16) {
 		vsl_ends(vdi_handle,0,0);
 		vsl_type(vdi_handle,1);
 		short vdi_color=0;
@@ -184,7 +190,6 @@ static void draw_worm_set_vdi_attributes(short color){
 		}
 		vsl_color(vdi_handle,vdi_color);
 	}else{
-		vsl_width(vdi_handle,3);
 		vsl_ends(vdi_handle,0,0);
 		vsl_type(vdi_handle,1);
 		//vsl_color(vdi_handle,1);
@@ -211,13 +216,13 @@ static void draw_worm_set_vdi_attributes(short color){
 	}
 }
 
-static void draw_worm_segment(VRECT line,short worm){
-	draw_worm_set_vdi_attributes(worm);
+static void draw_worm_segment(BOARD_RENDER_T* board, VRECT line,short worm){
+	draw_worm_set_vdi_attributes(board,worm);
 	v_pline(vdi_handle,2,&line.x1);
 }
 
-static void draw_worm_box(VRECT rect,short worm){
-	draw_worm_set_vdi_attributes(worm);
+static void draw_worm_box(BOARD_RENDER_T* board, VRECT rect,short worm){
+	draw_worm_set_vdi_attributes(board,worm);
 #if 0
 	vsf_interior(vdi_handle,0);
 	vsf_perimeter(vdi_handle,1);
@@ -263,45 +268,45 @@ static short FUN_00000788(short position){
 	return tmp + -1;
 }
 
-static void draw_worm(short position,short direction,short color){
+static void draw_worm(BOARD_RENDER_T* board,short position,short direction,short color){
 	VRECT line;
 	line.y1 = FUN_00000788(position);
-	line.x1 = line.y1 * array3d54[2] + array3d54[0];
+	line.x1 = line.y1 * board->delta.x2 + board->delta.x1;
 	line.y1 = FUN_00000756(position);
-	line.y1 = line.y1 * array3d54[3] + array3d54[1];
+	line.y1 = line.y1 * board->delta.y2 + board->delta.y1;
 	short sVar1 = FUN_00000756(position);
 	if (sVar1 % 2 == 1) {
-		line.x1 = array3d54[2] / 2 + line.x1;
+		line.x1 = board->delta.x2 / 2 + line.x1;
 	}
 	switch(direction) {
 		case 1:
-			line.x2 = array3d54[2] / 2 + line.x1;
+			line.x2 = board->delta.x2 / 2 + line.x1;
 			line.y2 = line.y1;
 			break;
 		case 2:
-			line.x2 = array3d54[2] / 4 + line.x1;
-			line.y2 = line.y1 - array3d54[3] / 2;
+			line.x2 = board->delta.x2 / 4 + line.x1;
+			line.y2 = line.y1 - board->delta.y2 / 2;
 			break;
 		case 3:
-			line.x2 = line.x1 - array3d54[2] / 4;
-			line.y2 = line.y1 - array3d54[3] / 2;
+			line.x2 = line.x1 - board->delta.x2 / 4;
+			line.y2 = line.y1 - board->delta.y2 / 2;
 			break;
 		case 4:
-			line.x2 = line.x1 - array3d54[2] / 2;
+			line.x2 = line.x1 - board->delta.x2 / 2;
 			line.y2 = line.y1;
 			break;
 		case 5:
-			line.x2 = line.x1 - array3d54[2] / 4;
-			line.y2 = array3d54[3] / 2 + line.y1;
+			line.x2 = line.x1 - board->delta.x2 / 4;
+			line.y2 = board->delta.y2 / 2 + line.y1;
 			break;
 		case 6:
-			line.x2 = array3d54[2] / 4 + line.x1;
-			line.y2 = array3d54[3] / 2 + line.y1;
+			line.x2 = board->delta.x2 / 4 + line.x1;
+			line.y2 = board->delta.y2 / 2 + line.y1;
 	}
-	draw_worm_segment(line,color);
+	draw_worm_segment(board,line,color);
 }
 
-static void draw_worm_score(short worm){
+static void draw_worm_score(BOARD_RENDER_T* board,short worm){
 	short score = worm_scores[worm];
 	char str[4];
 	str[3]='\0';
@@ -313,37 +318,8 @@ static void draw_worm_score(short worm){
 		score /= 10;
 	}
 	v_gtext(vdi_handle,
-			array3d64[hires_flag][6] * worm + array3d64[hires_flag][4],
-			array3d64[hires_flag][5],str);
-}
-
-static void draw_playfield(void){
-	vsf_interior(vdi_handle,1);
-	v_hide_c(vdi_handle);
-	vr_recfl(vdi_handle,&playfield.x1);
-	vsm_type(vdi_handle,hires_flag?3:1);
-	vsm_height(vdi_handle,hires_flag?5:1);
-	vsm_color(vdi_handle,0);
-	for(short y=0; y<20; y+=2) {
-		for(short x=0; x<20; ++x){
-			VRECT ptsin;
-			ptsin.x1 = array3d54[2] * x + array3d54[0];
-			ptsin.y1 = array3d54[3] * y + array3d54[1];
-			ptsin.x2 = array3d54[2] * x + array3d54[0] + array3d54[2] / 2;
-			ptsin.y2 = (y + 1) * array3d54[3] + array3d54[1];
-			v_pmarker(vdi_handle,2,&ptsin.x1);
-		}
-	}
-	for(short worm=0; worm<4; ++worm){
-		VRECT rect;
-		rect.x1=array3d64[hires_flag][6] * worm + array3d64[hires_flag][0];
-		rect.y1=array3d64[hires_flag][1];
-		rect.x2=array3d64[hires_flag][6] * worm + array3d64[hires_flag][2] + array3d64[hires_flag][0];
-		rect.y2=array3d64[hires_flag][3]        + array3d64[hires_flag][1];
-		draw_worm_box(rect,worm);
-		draw_worm_score(worm);
-	}
-	v_show_c(vdi_handle,1);
+			board->score_pad * worm + board->score_textx,
+			board->score_texty,str);
 }
 
 // pump a list of byte pairs into the soundchip
@@ -402,34 +378,34 @@ static void sound_play_death(void){
 	}
 }
 
-static void do_capture(short worm){
+static void do_capture(BOARD_RENDER_T* board,short worm){
 	++worm_scores[worm];
-	draw_worm_score(worm);
+	draw_worm_score(board,worm);
 	sound_play_win_chord();
 	board_state[worm_position[worm]][worm] = 0x3f;
 	v_hide_c(vdi_handle);
 	for(short direction=1; direction<7; ++direction){
-		draw_worm(worm_position[worm],direction,0xe);
+		draw_worm(board,worm_position[worm],direction,0xe);
 	}
 	evnt_timer(3);
 	for(short direction=1; direction<7; ++direction){
-		draw_worm(worm_position[worm],direction,worm);
+		draw_worm(board,worm_position[worm],direction,worm);
 	}
 	v_show_c(vdi_handle,1);
 }
 
-static void draw_worms_animate(short worm,short direction){
+static void draw_worms_animate(BOARD_RENDER_T* board,short worm,short direction){
 	short worm_pos=worm_position[worm];
 	board_state_all[worm_pos]       += array3d32[direction];
 	board_state[worm_pos][worm] += array3d32[direction];
 	v_hide_c(vdi_handle);
 	if (board_state_all[worm_pos] == 0x3f) {
-		do_capture(worm);
+		do_capture(board,worm);
 	}else{
 		sound_play_note(direction);
-		draw_worm(worm_pos,direction,0xe);
+		draw_worm(board,worm_pos,direction,0xe);
 		evnt_timer(3);
-		draw_worm(worm_pos,direction,worm);
+		draw_worm(board,worm_pos,direction,worm);
 	}
 	short direction_table[7]={0,1,-22,-23,-1,22,23};
 	worm_pos += direction_table[direction];
@@ -452,28 +428,28 @@ static void draw_worms_animate(short worm,short direction){
 	board_state_all[worm_pos]       += array3d32[direction];
 	board_state[worm_pos][worm] += array3d32[direction];
 	if(board_state_all[worm_pos] == 0x3f){
-		do_capture(worm);
+		do_capture(board,worm);
 		sound_play_death();
 	}else{
-		draw_worm(worm_pos,direction,0xe);
+		draw_worm(board,worm_pos,direction,0xe);
 		evnt_timer(3);
-		draw_worm(worm_pos,direction,worm);
+		draw_worm(board,worm_pos,direction,worm);
 	}
 	v_show_c(vdi_handle,1);
 }
 
-static void timer_tick(void){
+static void board_tick(BOARD_RENDER_T* board){
 	if((runmode == 0) || (runmode == 2)){
 		if(array5adc[0]){
 			v_hide_c(vdi_handle);
-			draw_worm(worm_position[current_worm],direction,worm_flash?current_worm:0xf);
+			draw_worm(board,worm_position[current_worm],direction,worm_flash?current_worm:0xf);
 			v_show_c(vdi_handle,1);
 			worm_flash=!worm_flash;
 		}
 		return;
 	}
 	worm_brains[current_worm][board_state_all[worm_position[current_worm]]] = direction;
-	draw_worms_animate(current_worm,direction);
+	draw_worms_animate(board,current_worm,direction);
 	FUN_00001578();
 }
 
@@ -491,21 +467,50 @@ static short FUN_000009e2(short param_1){
 	return 0;
 }
 
-static void redraw(){
-	draw_playfield();
+static void board_redraw(BOARD_RENDER_T* board){
 	v_hide_c(vdi_handle);
+	vsf_interior(vdi_handle,1);
+	vr_recfl(vdi_handle,(short*)&board->vrect);
+	vsm_type(vdi_handle,board->vrect.x2>319?3:1);
+	vsm_height(vdi_handle,board->vrect.y2>199?5:1);
+	vsm_color(vdi_handle,0);
+	for(short y=0; y<20; y+=2) {
+		for(short x=0; x<20; ++x){
+			VRECT ptsin;
+			ptsin.x1 = board->delta.x2 * x + board->delta.x1;
+			ptsin.y1 = board->delta.y2 * y + board->delta.y1;
+			ptsin.x2 = board->delta.x2 * x + board->delta.x1 + board->delta.x2 / 2;
+			ptsin.y2 = (y + 1) * board->delta.y2 + board->delta.y1;
+			v_pmarker(vdi_handle,2,&ptsin.x1);
+		}
+	}
+	for(short worm=0; worm<4; ++worm){
+		VRECT rect;
+		rect.x1=board->score_pad * worm + board->score_x;
+		rect.y1=board->score_y;
+		rect.x2=board->score_pad * worm + board->score_w + board->score_x;
+		rect.y2=board->score_h        + board->score_y;
+		draw_worm_box(board,rect,worm);
+		draw_worm_score(board,worm);
+	}
 	for(short i=1; i<451; ++i){
 		if(FUN_000009e2(i) && board_state_all[i]){
 			for(short worm=0; worm<4; ++worm){
 				for(short direction=1; direction<7; direction++){
 					if(board_state[i][worm] & array3d32[direction]){
-						draw_worm(i,direction,worm);
+						draw_worm(board,i,direction,worm);
 					}
 				}
 			}
 		}
 	}
 	v_show_c(vdi_handle,1);
+}
+
+static void redraw(void){
+	short msg[8];
+	msg[0]=WM_REDRAW;
+	appl_write(0,16,&msg);
 }
 
 static void FUN_0000178e(short *param_1,short param_2){
@@ -547,6 +552,7 @@ static void board_reset(){
 		worm_position[worm] = 0xd5;
 	}
 	array5adc[0] = 0;
+	redraw();
 	return;
 }
 
@@ -561,7 +567,7 @@ static short FUN_00001b28(short param_1,short *param_2){
 	return 0;
 }
 
-static short handle_key_event(short event){
+static short handle_key_event(BOARD_RENDER_T* board,short event){
 	short sVar2;
 	switch(event&0xff00){
 		case 0x1c00:
@@ -573,7 +579,7 @@ static short handle_key_event(short event){
 		case 0x4b00:
 			if (1 < array5adc[0]) {
 				v_hide_c(vdi_handle);
-				draw_worm(worm_position[current_worm],direction,0xf);
+				draw_worm(board,worm_position[current_worm],direction,0xf);
 				direction += 1;
 				while (sVar2 = FUN_00001b28(direction,array5adc), sVar2 == 0) {
 					direction += 1;
@@ -581,7 +587,7 @@ static short handle_key_event(short event){
 						direction = 1;
 					}
 				}
-				draw_worm(worm_position[current_worm],direction,current_worm);
+				draw_worm(board,worm_position[current_worm],direction,current_worm);
 				v_show_c(vdi_handle,1);
 				worm_flash=1;
 			}
@@ -589,7 +595,7 @@ static short handle_key_event(short event){
 		case 0x4d00:
 			if (1 < array5adc[0]) {
 				v_hide_c(vdi_handle);
-				draw_worm(worm_position[current_worm],direction,0xf);
+				draw_worm(board,worm_position[current_worm],direction,0xf);
 				direction += -1;
 				while (sVar2 = FUN_00001b28(direction,array5adc), sVar2 == 0) {
 					direction += -1;
@@ -597,7 +603,7 @@ static short handle_key_event(short event){
 						direction = 6;
 					}
 				}
-				draw_worm(worm_position[current_worm],direction,current_worm);
+				draw_worm(board,worm_position[current_worm],direction,current_worm);
 				v_show_c(vdi_handle,1);
 				worm_flash=1;
 			}
@@ -617,7 +623,6 @@ static short menu_option_selected(short me_ntitle,short menu_item){
 			switch(menu_item) {
 				case 0x14:
 					board_reset();
-					draw_playfield();
 					for(short worm=0; worm<4; ++worm){
 						worm_reset_brain(worm);
 						set_worm_mode(worm,2);
@@ -628,14 +633,12 @@ static short menu_option_selected(short me_ntitle,short menu_item){
 					return 0;
 				case 0x15:
 					board_reset();
-					draw_playfield();
 					set_runmode(1);
 					current_worm = 0xffff;
 					FUN_00001578();
 					return 0;
 				case 0x16:
 					board_reset();
-					draw_playfield();
 					for(short worm=0; worm<4; ++worm) {
 						worm_reset_brain(worm);
 					}
@@ -688,7 +691,7 @@ static short menu_option_selected(short me_ntitle,short menu_item){
 	return 0;
 }
 
-static void handle_aes_events(void){
+static void handle_aes_events(BOARD_RENDER_T* board){
 	short quit = 0;
 	do {
 		short dummy;
@@ -703,7 +706,7 @@ static void handle_aes_events(void){
 				&dummy);
 		wind_update(1);
 		if(event & MU_TIMER){
-			timer_tick();
+			board_tick(board);
 		}
 		if((event & MU_MESAG) != 0) {
 			switch(ev_mmgpbuff[0]){
@@ -712,17 +715,17 @@ static void handle_aes_events(void){
 					break;
 				case WM_REDRAW:
 				case WM_ONTOP:
-					redraw();
+					board_redraw(board);
 			}
 		}
 		if((event & MU_KEYBD) != 0) {
-			quit = handle_key_event(ev_mkreturn);
+			quit = handle_key_event(board,ev_mkreturn);
 		}
 		wind_update(0);
 	}while(!quit);
 }
 
-static short initialize(void){
+static short initialize(BOARD_RENDER_T* board){
 	if(appl_init()) return 0;
 
 	short gr_hwchar,gr_hhchar,gr_hwbox,gr_hhbox;
@@ -733,46 +736,63 @@ static short initialize(void){
 		work_in[i] = 1;
 	work_in[10] = 2;
 	v_opnvwk(work_in,&vdi_handle,work_out);
-	playfield.x1 = 0;
-	playfield.y1 = gr_hhbox;
-	playfield.x2 = work_out[0];
-	playfield.y2 = work_out[1];
-	hires_flag = (work_out[13]<16); // how many colors
-	if(hires_flag){
-		array3d54[0]*=2;
-		array3d54[1]*=2;
-		array3d54[2]*=2;
-		array3d54[3]*=2;
-	}
+	board->vrect.x1 = 0;
+	board->vrect.y1 = gr_hhbox;
+	board->vrect.x2 = work_out[0];
+	board->vrect.y2 = work_out[1];
+	board->colordepth = work_out[13];
 
 	if(!rsrc_load("NIGHT.RSC")){
 		form_alert(1,"[3][Fatal error !|Can't find the resorce|file NIGHT.RSC][ Abort ]");
 		return 0;
 	}
-	short index1,index2;
-	if(!hires_flag){
-		index1=1;
-		index2=3;
-	}else{
-		index1=0;
-		index2=2;
+
+	board->delta.x1=40;
+	board->delta.y1=25;
+	board->delta.x2=12;
+	board->delta.y2=8;
+
+	board->score_x=30;
+	board->score_y=184;
+	board->score_w=28;
+	board->score_h=11;
+	board->score_textx=32;
+	board->score_texty=192;
+	board->score_pad=80;
+
+	short menu_index=1;
+	if(board->vrect.x2>319){	// high rez horizontal
+		board->delta.x1*=2;
+		board->delta.x2*=2;
+		board->score_x=68;
+		board->score_w=31;
+		board->score_textx=72;
+		board->score_pad*=2;
+		menu_index=0;
 	}
-	if(rsrc_gaddr(R_TREE,index1,&menu))
+	if(board->vrect.y2>199){	// high rez vertical
+		board->delta.y1*=2;
+		board->delta.y2*=2;
+		board->score_y=365;
+		board->score_h=27;
+		board->score_texty*=2;
+	}
+
+	if(rsrc_gaddr(R_TREE,menu_index,&menu))
 		menu_bar(menu,0x4644);
-	rsrc_gaddr(R_TREE,index2,&about_dialog);
+	rsrc_gaddr(R_TREE,board->colordepth>=16?3:2,&about_dialog);
 
 	v_show_c(vdi_handle,0);
 	graf_mouse(0,0);
 
 	soundflag = 1;
 	menu_icheck(menu,0x20,1);
-	board_reset();
 	for(short i=0; i<4; ++i){
 		worm_reset_brain(i);
 		set_worm_mode(i,0);
 	}
 	set_worm_mode(0,1);
-	draw_playfield();
+	board_reset();
 	current_worm = 0;
 	FUN_00001126();
 	set_speed(1);
@@ -787,8 +807,9 @@ static void quit(void){
 }
 
 int main(int argc, char *argv[]){
-	if(initialize()){
-		handle_aes_events();
+	BOARD_RENDER_T board;
+	if(initialize(&board)){
+		handle_aes_events(&board);
 	}
 	//Cnecin();
 	quit();
