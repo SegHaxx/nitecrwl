@@ -507,6 +507,7 @@ static void board_redraw(BOARD_RENDER_T* board){
 	v_show_c(vdi_handle,1);
 }
 
+// queue an AES redraw message
 static void redraw(void){
 	short msg[8];
 	msg[0]=WM_REDRAW;
@@ -811,7 +812,6 @@ int main(int argc, char *argv[]){
 	if(initialize(&board)){
 		handle_aes_events(&board);
 	}
-	//Cnecin();
 	quit();
 	return 0;
 }
