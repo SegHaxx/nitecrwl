@@ -1,11 +1,7 @@
 #include <gem.h>
 #include <osbind.h>
 //#include <stdio.h>
-
-static OBJECT* menu;
-static OBJECT* about_dialog;
-static short vdi_handle;
-static short ev_mtcount;
+//using namespace std;
 
 typedef struct{
 	short x1;
@@ -14,32 +10,88 @@ typedef struct{
 	short y2;
 } VRECT;
 
-static short soundflag;
-static short array3d32[7]={0x0,0x1,0x2,0x4,0x8,0x10,0x20};
+class board_model{
+	public:
+		board_model(){reset();};
+		void reset();
+		void worm_generate_moves(void);
+		void next_worm(void);
+		bool worm_direction_is_valid_move(short);
+		void worm_reset_brain(short);
+		void worm_tick(short,short);
+		void capture(short,short);
+		void worm_rotate(short);
 
-typedef struct{
-	VRECT vrect;
-	short colordepth;
-	VRECT delta;
-	short score_x,score_y;
-	short score_w,score_h;
-	short score_textx,score_texty;
-	short score_pad;
-	short worm_flash;
-} BOARD_RENDER_T;
+		void set_runmode(short mode){runmode=mode;};
+		short get_runmode(){return runmode;};
+		void set_worm_pos(short worm,short pos){worm_position[worm]=pos;};
+		short get_worm_pos(short worm){return worm_position[worm];};
+		void set_worm_mode(short worm,short mode){worm_mode[worm]=mode;};
+		void set_current_worm(short worm){current_worm=worm;};
+		short get_current_worm(){return current_worm;};
+		short get_worm_score(short worm){return worm_score[worm];};
 
-static short board_state[450][4];
-static short board_state_all[450];
-static short array5adc[7];
-static short worm_scores[4];
-static short worm_position[4];
-static short current_worm;
-static short worm_brains[4][64];
-static short worm_modes[4];
-static short direction;
-static short runmode;
+		short current_worm_valid_move_count;
+		short current_worm_direction;
+	private:
+		short runmode;
+		short current_worm;
+		short worm_score[4];
+		short worm_position[4];
+		short worm_mode[4];
+		short current_worm_valid_moves[6];
+		short worm_brain[4][64];
+	public:
+		unsigned char state[450][4];
+		unsigned char state_all[450];
+};
 
-static void set_runmode(short mode){
+class board_render{
+	public:
+		short vdi;
+		short ev_mtcount;
+		void set_vdi(short v,short c){vdi=v;colordepth=c;};
+		void set_geometry(short,short,short,short);
+		void set_worm_mode(short,short);
+		void set_runmode(short);
+		void set_speed(short);
+		void reset();
+		void redraw();
+		void tick();
+		bool key_event(short);
+		void worm_rotate(short);
+	private:
+		VRECT vrect;
+		short colordepth;
+		short pad_x,pad_y;
+		short cell_w,cell_h;
+		short score_x,score_y;
+		short score_w,score_h;
+		short score_pad;
+		short score_textx,score_texty;
+		short worm_flash;
+		void worm_tick(short,short);
+		void capture(short,short);
+		void worm_draw(short,short,short);
+		void worm_draw(short,short,short,short);
+		void worm_draw_get_line(VRECT*,short,short);
+		void worm_draw_get_line(VRECT*,short,short,short);
+		void worm_draw_vdi(short,void (*draw)(short));
+		void worm_draw_segment(VRECT*,short);
+		void worm_draw_box(VRECT*,short);
+		void worm_draw_score(short);
+		void position_to_xy(short,short&,short&);
+	public:
+		board_model model;
+};
+
+static OBJECT* menu;
+static OBJECT* about_dialog;
+
+static bool soundflag;
+
+inline void board_render::set_runmode(short mode){
+	model.set_runmode(mode);
 	short flag=0;
 	switch(mode){
 		case 0:
@@ -51,83 +103,81 @@ static void set_runmode(short mode){
 		default:
 			return;
 	}
-	runmode=mode;
 	menu_icheck(menu,0x19,!flag);
 	menu_icheck(menu,0x1a,flag);
 }
 
-static short rand(short n){
-  long rand = Random();
-  return (rand & 0x7fff) % n + 1;
-}
-
-static void FUN_00001126(void){
-	short sVar1 = worm_brains[current_worm][board_state_all[worm_position[current_worm]]];
-	if(sVar1 == 0){
-		array5adc[0] = 0;
-		short local_8 = board_state_all[worm_position[current_worm]];
-		for(short i=1; i<7; ++i){
-			if(local_8 % 2 == 0){
-				array5adc[0] += 1;
-				array5adc[array5adc[0]] = i;
-			}
-			local_8 /= 2;
+inline void board_model::worm_generate_moves(void){
+	short direction = worm_brain[current_worm][state_all[worm_position[current_worm]]];
+	if(direction){	// go in learned direction
+		current_worm_valid_move_count = 1;
+		current_worm_valid_moves[0] = direction;
+		current_worm_direction = direction;
+		return;
+	}
+	// enumerate valid moves
+	current_worm_valid_move_count = 0;
+	short state = state_all[worm_position[current_worm]];
+	for(short direction=1; direction<7; ++direction){
+		if(state % 2 == 0){
+			current_worm_valid_moves[current_worm_valid_move_count] = direction;
+			++current_worm_valid_move_count;
 		}
-		if(0 < array5adc[0]){
-			sVar1 = rand(array5adc[0]);
-			direction = array5adc[sVar1];
-		}
-	}else{
-		array5adc[0] = 1;
-		array5adc[1] = sVar1;
-		direction = sVar1;
+		state /= 2;
+	}
+	// pick a random valid move
+	if(current_worm_valid_move_count){
+		short rnd = Random() % current_worm_valid_move_count;
+		current_worm_direction = current_worm_valid_moves[rnd];
 	}
 }
 
-static void FUN_00001578(void){
-	short sVar1 = current_worm;
-	while ((current_worm = (current_worm + 1) % 4, worm_modes[current_worm] < 1 ||
-				(board_state_all[worm_position[current_worm]] == 0x3f))) {
-		if (current_worm == sVar1) {
+inline void board_model::next_worm(void){
+	short start_worm = current_worm;
+	while ((current_worm = (current_worm + 1) % 4,
+				worm_mode[current_worm] < 1 ||
+				(state_all[worm_position[current_worm]] == 0x3f))) {
+		if (current_worm == start_worm) { // all worms dead
 			set_runmode(2);
-			array5adc[0] = 0;
+			current_worm_valid_move_count = 0;
 			return;
 		}
 	}
-	FUN_00001126();
-	if (worm_modes[current_worm] != 1) {
+	worm_generate_moves();
+	if (worm_mode[current_worm] != 1) {
 		return;
 	}
-	if(array5adc[0] < 2){
+	if(current_worm_valid_move_count < 2){
 		return;
 	}
 	set_runmode(0);
 }
 
-static void set_worm_mode(short worm,short mode){
-	worm_modes[worm] = mode;
-	static short worm_menu_indexes[4]={0x22,0x2a,0x32,0x3a};
+inline void board_render::set_worm_mode(short worm,short mode){
+	model.set_worm_mode(worm,mode);
+	static char worm_menu_indexes[4]={0x22,0x2a,0x32,0x3a};
 	short me_citem = worm_menu_indexes[worm];
 	menu_icheck(menu,me_citem  ,mode==1);
 	menu_icheck(menu,me_citem+3,mode==2);
 	menu_icheck(menu,me_citem+6,mode==0);
 }
 
-static void worm_reset_brain(short worm){
+inline void board_model::worm_reset_brain(short worm){
 	for(short i=0; i<64; ++i){
-		worm_brains[worm][i] = 0;
+		worm_brain[worm][i] = 0;
 	}
-	worm_brains[worm][31] = 6;
-	worm_brains[worm][47] = 5;
-	worm_brains[worm][55] = 4;
-	worm_brains[worm][59] = 3;
-	worm_brains[worm][61] = 2;
-	worm_brains[worm][62] = 1;
-	worm_brains[worm][63] = 7;
+	worm_brain[worm][31] = 6;
+	worm_brain[worm][47] = 5;
+	worm_brain[worm][55] = 4;
+	worm_brain[worm][59] = 3;
+	worm_brain[worm][61] = 2;
+	worm_brain[worm][62] = 1;
+	worm_brain[worm][63] = 7;
 }
 
-static void set_speed(short speed){
-	static short speedtbl[]={0x32,0x96,500};
+inline void board_render::set_speed(short speed){
+	//static short speedtbl[]={50,150,500};
+	static short speedtbl[]={0,150,500};
 	for(short i=0; i<3; ++i){
 		short flag=(speed==i);
 		if(flag){
@@ -137,151 +187,180 @@ static void set_speed(short speed){
 	}
 }
 
-static void draw_worm_set_vdi_attributes(BOARD_RENDER_T* board, short color){
-	vsl_width(vdi_handle,board->vrect.x2>319?3:1);
-	if(board->colordepth>=16) {
-		vsl_ends(vdi_handle,0,0);
-		vsl_type(vdi_handle,1);
-		short vdi_color=0;
-		switch(color) {
-			case 0:
-				vdi_color=2;
+typedef struct{
+    template<typename Tret, typename T>
+    static Tret lambda_ptr_exec(short data) {
+        return (Tret) (*(T*)fn<T>())(data);
+    }
+
+    template<typename Tret = void, typename Tfp = Tret(*)(short), typename T>
+    static Tfp ptr(T& t) {
+        fn<T>(&t);
+        return (Tfp) lambda_ptr_exec<Tret, T>;
+    }
+
+    template<typename T>
+    static void* fn(void* new_fn = nullptr) {
+        static void* fn;
+        if (new_fn != nullptr)
+            fn = new_fn;
+        return fn;
+    }
+} Lambda;
+
+inline void board_render::worm_draw_vdi(short worm,void (*draw)(short)){
+	vsl_width(vdi,colordepth<4||vrect.x2>319?3:1);
+	if(colordepth>=16){
+		vsl_ends(vdi,2,2);
+		draw(worm+2);
+		return;
+	}
+	vsl_ends(vdi,0,0);
+	if(colordepth>=4){
+		short color=3;
+		switch(worm){
+			case -2:
+				draw(0);
 				break;
+			case -1:
+				draw(1);
+				break;
+			case 0:
+				color=2;
 			case 1:
-				vdi_color=3;
+				draw(color);
 				break;
 			case 2:
-				vdi_color=4;
-				break;
+				color=2;
 			case 3:
-				vdi_color=5;
-				break;
-			case 0xe:
-				//vdi_color=0;
-				break;
-			case 0xf:
-				vdi_color=1;
+				draw(1);
+				vsl_width(vdi,1);
+				vsl_udsty(vdi,0xaaaa);
+				vsl_type(vdi,7);
+				vswr_mode(vdi,2);
+				draw(color);
+				vswr_mode(vdi,1);
+				vsl_type(vdi,1);
 		}
-		vsl_color(vdi_handle,vdi_color);
-	}else{
-		vsl_ends(vdi_handle,0,0);
-		vsl_type(vdi_handle,1);
-		//vsl_color(vdi_handle,1);
-		//v_pline(vdi_handle,2,ptsin);
-		vsl_color(vdi_handle,0);
-		switch(color) {
-			case 0:
-				vsl_type(vdi_handle,3);
-				break;
-			case 1:
-				vsl_type(vdi_handle,4);
-				break;
-			case 2:
-				vsl_type(vdi_handle,5);
-				break;
-			case 3:
-				vsl_type(vdi_handle,6);
-				break;
-			case 0xe:
-				break;
-			case 0xf:
-				vsl_color(vdi_handle,1);
-		}
+		return;
 	}
-}
-
-static void draw_worm_segment(BOARD_RENDER_T* board, VRECT line,short worm){
-	draw_worm_set_vdi_attributes(board,worm);
-	v_pline(vdi_handle,2,&line.x1);
-}
-
-static void draw_worm_box(BOARD_RENDER_T* board, VRECT rect,short worm){
-	draw_worm_set_vdi_attributes(board,worm);
-#if 0
-	vsf_interior(vdi_handle,0);
-	vsf_perimeter(vdi_handle,1);
-	vr_recfl(vdi_handle,&rect.x1);
-#else
-	short ptsin[4];
-	ptsin[0]=rect.x1;
-	ptsin[1]=rect.y1;
-	ptsin[2]=rect.x2;
-	ptsin[3]=rect.y1;
-	v_pline(vdi_handle,2,ptsin);
-	ptsin[0]=rect.x2;
-	ptsin[1]=rect.y2;
-	//ptsin[2]=rect.x2;
-	//ptsin[3]=rect.y1;
-	v_pline(vdi_handle,2,ptsin);
-	//ptsin[0]=rect.x2;
-	//ptsin[1]=rect.y2;
-	ptsin[2]=rect.x1;
-	ptsin[3]=rect.y2;
-	v_pline(vdi_handle,2,ptsin);
-	ptsin[0]=rect.x1;
-	ptsin[1]=rect.y1;
-	//ptsin[2]=rect.x1;
-	//ptsin[3]=rect.y2;
-	v_pline(vdi_handle,2,ptsin);
-#endif
-}
-
-static short FUN_00000756(short position){
-	short tmp = (position / 0x2d) * 2;
-	if (0x16 < position % 0x2d) {
-		tmp += 1;
-	}
-	return tmp;
-}
-
-static short FUN_00000788(short position){
-	short tmp = position % 0x2d;
-	if (0x16 < tmp) {
-		tmp += -0x17;
-	}
-	return tmp + -1;
-}
-
-static void draw_worm(BOARD_RENDER_T* board,short position,short direction,short color){
-	VRECT line;
-	line.y1 = FUN_00000788(position);
-	line.x1 = line.y1 * board->delta.x2 + board->delta.x1;
-	line.y1 = FUN_00000756(position);
-	line.y1 = line.y1 * board->delta.y2 + board->delta.y1;
-	short sVar1 = FUN_00000756(position);
-	if (sVar1 % 2 == 1) {
-		line.x1 = board->delta.x2 / 2 + line.x1;
-	}
-	switch(direction) {
-		case 1:
-			line.x2 = board->delta.x2 / 2 + line.x1;
-			line.y2 = line.y1;
+	short color=0;
+	switch(worm){
+		case -2:
+			draw(0);
 			break;
+		case -1:
+			draw(1);
+			break;
+		case 1:
+			color=!color;
 		case 2:
-			line.x2 = board->delta.x2 / 4 + line.x1;
-			line.y2 = line.y1 - board->delta.y2 / 2;
+			draw(!color);
+			vsl_width(vdi,1);
+		case 0:
+			draw(color);
 			break;
 		case 3:
-			line.x2 = line.x1 - board->delta.x2 / 4;
-			line.y2 = line.y1 - board->delta.y2 / 2;
-			break;
-		case 4:
-			line.x2 = line.x1 - board->delta.x2 / 2;
-			line.y2 = line.y1;
-			break;
-		case 5:
-			line.x2 = line.x1 - board->delta.x2 / 4;
-			line.y2 = board->delta.y2 / 2 + line.y1;
-			break;
-		case 6:
-			line.x2 = board->delta.x2 / 4 + line.x1;
-			line.y2 = board->delta.y2 / 2 + line.y1;
+			draw(1);
+			vsl_width(vdi,1);
+			vsl_udsty(vdi,0x6666);
+			vsl_type(vdi,7);
+			vswr_mode(vdi,3);
+			draw(1);
+			vswr_mode(vdi,1);
+			vsl_type(vdi,1);
 	}
-	draw_worm_segment(board,line,color);
 }
 
-static void draw_worm_score(BOARD_RENDER_T* board,short worm){
-	short score = worm_scores[worm];
+inline void board_render::worm_draw_segment(VRECT* line,short worm){
+	auto draw_line = [=] (short color) {
+		vsl_color(vdi,color);
+		v_pline(vdi,2,(short*)line);
+	};
+	worm_draw_vdi(worm,Lambda::ptr(draw_line));
+}
+
+inline void board_render::worm_draw_box(VRECT* rect,short worm){
+	auto draw_box = [=] (short color) {
+		vsl_color(vdi,color);
+		short ptsin[4];
+		ptsin[0]=rect->x1;
+		ptsin[1]=rect->y1;
+		ptsin[2]=rect->x2;
+		ptsin[3]=rect->y1;
+		v_pline(vdi,2,ptsin);
+		ptsin[0]=rect->x2;
+		ptsin[1]=rect->y2;
+		//ptsin[2]=rect.x2;
+		//ptsin[3]=rect.y1;
+		v_pline(vdi,2,ptsin);
+		//ptsin[0]=rect.x2;
+		//ptsin[1]=rect.y2;
+		ptsin[2]=rect->x1;
+		ptsin[3]=rect->y2;
+		v_pline(vdi,2,ptsin);
+		ptsin[0]=rect->x1;
+		ptsin[1]=rect->y1;
+		//ptsin[2]=rect.x1;
+		//ptsin[3]=rect.y2;
+		v_pline(vdi,2,ptsin);
+	};
+	worm_draw_vdi(worm,Lambda::ptr(draw_box));
+}
+
+inline void board_render::position_to_xy(short pos,short& x,short& y){
+	x = pos % 45;
+	if (x > 22) {
+		x -= 23;
+	}
+	--x;
+	y = (pos / 45) * 2;
+	if (pos % 45 > 22) {
+		++y;
+	}
+}
+
+inline void board_render::worm_draw_get_line(
+		VRECT* line, short x, short y, short direction){
+	line->x1 = x * cell_w*4 + pad_x;
+	line->y1 = y * cell_h*2 + pad_y;
+	if (y % 2 == 1) {
+		line->x1 += cell_w*2;
+	}
+	static char direction_table[6][2]={
+		{ 2, 0},
+		{ 1,-1},
+		{-1,-1},
+		{-2, 0},
+		{-1, 1},
+		{ 1, 1}};
+	line->x2 = line->x1 + cell_w * direction_table[direction][0];
+	line->y2 = line->y1 + cell_h * direction_table[direction][1];
+}
+
+inline void board_render::worm_draw_get_line(
+		VRECT* line, short pos, short direction){
+	short x,y;
+	position_to_xy(pos,x,y);
+	worm_draw_get_line(line,x,y,direction);
+}
+
+inline void board_render::worm_draw(
+		short pos, short direction, short worm){
+	VRECT line;
+	worm_draw_get_line(&line,pos,direction);
+	worm_draw_segment(&line,worm);
+}
+
+inline void board_render::worm_draw(
+		short x, short y, short direction, short worm){
+	VRECT line;
+	worm_draw_get_line(&line,x,y,direction);
+	worm_draw_segment(&line,worm);
+}
+
+inline void board_render::worm_draw_score(short worm){
+	short score = model.get_worm_score(worm);
 	char str[4];
 	str[3]='\0';
 	for(short i=2; i>=0; --i){
@@ -291,22 +370,27 @@ static void draw_worm_score(BOARD_RENDER_T* board,short worm){
 		}
 		score /= 10;
 	}
-	v_gtext(vdi_handle,
-			board->score_pad * worm + board->score_textx,
-			board->score_texty,str);
+	v_gtext(vdi,
+			score_pad * worm + score_textx,
+			score_texty, str);
+}
+
+static void set_soundflag(bool flag){
+	soundflag=flag;
+	menu_icheck(menu,0x20,flag);
 }
 
 // pump a list of byte pairs into the soundchip
 // end on -1
-static void sound_play(char* tbl){
+static void sound_play(unsigned char* tbl){
 	if(!soundflag) return;
-	while(*tbl!=-1){
+	while(*tbl!=0xff){
 		Giaccess(*tbl++,*tbl++);
 	}		
 }
 
 static void sound_play_win_chord(void){
-	char chord[]={
+	unsigned char chord[]={
 		0xdd,0x80,
 		0x01,0x81,
 		0x7b,0x82,
@@ -320,20 +404,20 @@ static void sound_play_win_chord(void){
 		0x00,0x8b,
 		0x14,0x8c,
 		0x00,0x8d,
-		-1};
+		0xff};
 	sound_play(chord);
 }
 
 static void sound_play_note(short note){
-	char notetbl[6][5]={
-		{0xdd,0x80,1,0x81,-1},
-		{0x7b,0x80,1,0x81,-1},
-		{0x3e,0x80,1,0x81,-1},
-		{0xee,0x80,0,0x81,-1},
-		{0xbd,0x80,0,0x81,-1},
-		{0x9f,0x80,0,0x81,-1}};
-	sound_play(notetbl[note-1]);
-	char table[]={
+	unsigned char notetbl[6][5]={
+		{0xdd,0x80,1,0x81,0xff},
+		{0x7b,0x80,1,0x81,0xff},
+		{0x3e,0x80,1,0x81,0xff},
+		{0xee,0x80,0,0x81,0xff},
+		{0xbd,0x80,0,0x81,0xff},
+		{0x9f,0x80,0,0x81,0xff}};
+	sound_play(notetbl[note]);
+	unsigned char table[]={
 		0xfe,0x87,
 		0x10,0x88,
 		0x00,0x89,
@@ -341,47 +425,58 @@ static void sound_play_note(short note){
 		0x00,0x8b,
 		0x14,0x8c,
 		0x00,0x8d,
-		-1};
+		0xff};
 	sound_play(table);
 }
 
 static void sound_play_death(void){
-	for(short note=6; 0<note; --note){
+	for(short note=5; note>=0; --note){
 		sound_play_note(note);
 		evnt_timer(0x32);
 	}
 }
 
-static void do_capture(BOARD_RENDER_T* board,short worm){
-	++worm_scores[worm];
-	draw_worm_score(board,worm);
-	sound_play_win_chord();
-	board_state[worm_position[worm]][worm] = 0x3f;
-	v_hide_c(vdi_handle);
-	for(short direction=1; direction<7; ++direction){
-		draw_worm(board,worm_position[worm],direction,0xe);
-	}
-	evnt_timer(3);
-	for(short direction=1; direction<7; ++direction){
-		draw_worm(board,worm_position[worm],direction,worm);
-	}
-	v_show_c(vdi_handle,1);
+inline void board_model::capture(short worm_pos,short worm){
+	state[worm_pos][worm] = 0x3f;
+	++worm_score[worm];
 }
 
-static void draw_worms_animate(BOARD_RENDER_T* board,short worm,short direction){
-	short worm_pos=worm_position[worm];
-	board_state_all[worm_pos]       += array3d32[direction];
-	board_state[worm_pos][worm] += array3d32[direction];
-	v_hide_c(vdi_handle);
-	if (board_state_all[worm_pos] == 0x3f) {
-		do_capture(board,worm);
-	}else{
-		sound_play_note(direction);
-		draw_worm(board,worm_pos,direction,0xe);
-		evnt_timer(3);
-		draw_worm(board,worm_pos,direction,worm);
+inline void board_render::capture(short worm_pos,short worm){
+	sound_play_win_chord();
+	model.capture(worm_pos,worm);
+	worm_draw_score(worm);
+	v_hide_c(vdi);
+	for(short direction=0; direction<6; ++direction){
+		worm_draw(worm_pos,direction,-2);
 	}
-	short direction_table[7]={0,1,-22,-23,-1,22,23};
+	evnt_timer(3);
+	for(short direction=0; direction<6; ++direction){
+		worm_draw(worm_pos,direction,worm);
+	}
+	v_show_c(vdi,1);
+}
+
+inline void board_model::worm_tick(short worm,short direction){
+	worm_brain[worm][state_all[worm_position[worm]]] = direction+1;
+}
+
+inline void board_render::worm_tick(short worm,short direction){
+	short worm_pos=model.get_worm_pos(worm);
+	model.worm_tick(worm, direction);
+	model.state_all[worm_pos]   += 1<<direction;
+	model.state[worm_pos][worm] += 1<<direction;
+	v_hide_c(vdi);
+	if(model.state_all[worm_pos] == 0x3f){
+		capture(worm_pos,worm);
+	}else{
+		VRECT line;
+		worm_draw_get_line(&line,worm_pos,direction);
+		sound_play_note(direction);
+		worm_draw_segment(&line,-2);
+		evnt_timer(3);
+		worm_draw_segment(&line,worm);
+	}
+	signed char direction_table[6]={1,-22,-23,-1,22,23};
 	worm_pos += direction_table[direction];
 	if (450 < worm_pos) {
 		worm_pos -= 450;
@@ -396,96 +491,96 @@ static void draw_worms_animate(BOARD_RENDER_T* board,short worm,short direction)
 	if ((sVar1 == 21) || (sVar1 == 44)) {
 		worm_pos -= 20;
 	}
-	worm_position[worm] = worm_pos;
-	short flip[7]={0,4,5,6,1,2,3};
+	model.set_worm_pos(worm,worm_pos);
+	char flip[6]={3,4,5,0,1,2};
 	direction=flip[direction];
-	board_state_all[worm_pos]       += array3d32[direction];
-	board_state[worm_pos][worm] += array3d32[direction];
-	if(board_state_all[worm_pos] == 0x3f){
-		do_capture(board,worm);
+	model.state_all[worm_pos]   += 1<<direction;
+	model.state[worm_pos][worm] += 1<<direction;
+	if(model.state_all[worm_pos] == 0x3f){
+		capture(worm_pos,worm);
 		sound_play_death();
 	}else{
-		draw_worm(board,worm_pos,direction,0xe);
+		VRECT line;
+		worm_draw_get_line(&line,worm_pos,direction);
+		worm_draw_segment(&line,-2);
 		evnt_timer(3);
-		draw_worm(board,worm_pos,direction,worm);
+		worm_draw_segment(&line,worm);
 	}
-	v_show_c(vdi_handle,1);
+	v_show_c(vdi,1);
 }
 
-static void board_tick(BOARD_RENDER_T* board){
-	if((runmode == 0) || (runmode == 2)){
-		if(array5adc[0]){
-			v_hide_c(vdi_handle);
-			draw_worm(board,worm_position[current_worm],direction,board->worm_flash?current_worm:0xf);
-			v_show_c(vdi_handle,1);
-			board->worm_flash=!board->worm_flash;
+inline void board_render::tick(){
+	short worm=model.get_current_worm();
+	if((model.get_runmode() == 0) || (model.get_runmode() == 2)){
+		if(model.current_worm_valid_move_count){
+			v_hide_c(vdi);
+			worm_draw(model.get_worm_pos(worm),model.current_worm_direction-1,worm_flash?worm:-1);
+			v_show_c(vdi,1);
+			worm_flash=!worm_flash;
 		}
 		return;
 	}
-	worm_brains[current_worm][board_state_all[worm_position[current_worm]]] = direction;
-	draw_worms_animate(board,current_worm,direction);
-	FUN_00001578();
+	worm_tick(worm,model.current_worm_direction-1);
+	model.next_worm();
 }
 
-static short FUN_000009e2(short param_1){
-	if(param_1 < 1 || 0x1c1 < param_1){
-		return 0;
+inline void board_render::redraw(){
+	vsf_interior(vdi,1);
+	vsf_color(vdi,1);
+	v_hide_c(vdi);
+	vr_recfl(vdi,(short*)&vrect);
+	for(short worm=0; worm<4; ++worm){
+		VRECT rect;
+		rect.x1=score_pad * worm + score_x;
+		rect.y1=score_y;
+		rect.x2=score_pad * worm + score_w + score_x;
+		rect.y2=score_h + score_y;
+		worm_draw_box(&rect,worm);
+		worm_draw_score(worm);
 	}
-	short sVar1 = param_1 % 0x2d;
-	if(sVar1 < 1 || 0x2b < sVar1){
-		return 0;
-	}
-	if (sVar1 < 0x15 || 0x17 < sVar1) {
-		return 1;
-	}
-	return 0;
-}
-
-static void board_redraw(BOARD_RENDER_T* board){
-	v_hide_c(vdi_handle);
-	vsf_interior(vdi_handle,1);
-	vr_recfl(vdi_handle,(short*)&board->vrect);
-	vsm_type(vdi_handle,board->vrect.x2>319?3:1);
-	vsm_height(vdi_handle,board->vrect.y2>199?5:1);
-	vsm_color(vdi_handle,0);
+	vsm_color(vdi,0);
 	for(short y=0; y<20; y+=2) {
 		for(short x=0; x<20; ++x){
 			VRECT ptsin;
-			ptsin.x1 = board->delta.x2 * x + board->delta.x1;
-			ptsin.y1 = board->delta.y2 * y + board->delta.y1;
-			ptsin.x2 = board->delta.x2 * x + board->delta.x1 + board->delta.x2 / 2;
-			ptsin.y2 = (y + 1) * board->delta.y2 + board->delta.y1;
-			v_pmarker(vdi_handle,2,&ptsin.x1);
+			ptsin.x1 = pad_x + x * cell_w*4;
+			ptsin.y1 = pad_y + y * cell_h*2;
+			ptsin.x2 = pad_x + x * cell_w*4 + cell_w*2;
+			ptsin.y2 = pad_y + (y + 1) * cell_h*2;
+			v_pmarker(vdi,2,(short*)&ptsin);
 		}
 	}
-	for(short worm=0; worm<4; ++worm){
-		VRECT rect;
-		rect.x1=board->score_pad * worm + board->score_x;
-		rect.y1=board->score_y;
-		rect.x2=board->score_pad * worm + board->score_w + board->score_x;
-		rect.y2=board->score_h        + board->score_y;
-		draw_worm_box(board,rect,worm);
-		draw_worm_score(board,worm);
-	}
-	for(short i=1; i<451; ++i){
-		if(FUN_000009e2(i) && board_state_all[i]){
-			for(short worm=0; worm<4; ++worm){
-				for(short direction=1; direction<7; direction++){
-					if(board_state[i][worm] & array3d32[direction]){
-						draw_worm(board,i,direction,worm);
-					}
+	for(short y=0; y<20; ++y){
+		for(short x=0; x<20; ++x){
+			short pos=x+y*22;
+			if(model.state_all[pos]){
+				for(short worm=0; worm<4; ++worm){
+
+					auto draw_cell = [=] (short color) {
+						vsl_color(vdi,color);
+						for(short direction=0; direction<6; direction++){
+							if(model.state[pos][worm] & 1<<direction){
+								VRECT line;
+								worm_draw_get_line(&line,pos,direction);
+								v_pline(vdi,2,(short*)&line);
+							}
+						}
+					};
+					worm_draw_vdi(worm,Lambda::ptr(draw_cell));
+
 				}
 			}
 		}
 	}
-	v_show_c(vdi_handle,1);
+	v_show_c(vdi,1);
 }
 
 // queue an AES redraw message
 static void redraw(void){
 	short msg[8];
 	msg[0]=WM_REDRAW;
-	appl_write(0,16,&msg);
+	msg[1]=gl_apid;
+	//msg[2]=0;
+	appl_write(gl_apid,16,&msg);
 }
 
 static void dialog_reset_button(OBJECT* obj,short param_2){
@@ -504,298 +599,304 @@ static void do_about_dialog(void){
 	form_dial_grect(FMD_FINISH,&z,&c);
 	dialog_reset_button(about_dialog,7);
 	redraw();
-	return;
 }
 
-static void board_reset(){
+inline void board_model::reset(){
 	for(short i=0; i<450; ++i){
-		board_state_all[i] = 0;
+		state_all[i] = 0;
 		for(short worm=0; worm<4; ++worm){
-			board_state[i][worm] = 0;
+			state[i][worm] = 0;
 			//__asm__ volatile("" : "+g" (i) : :); // prevent optimization
 		}
 	}
 	for(short worm=0; worm<4; ++worm){
-		worm_scores[worm] = 0;
+		worm_score[worm] = 0;
 		worm_position[worm] = 0xd5;
 	}
-	array5adc[0] = 0;
+	current_worm_valid_move_count = 0;
+}
+
+inline void board_render::reset(){
+	model.reset();
 	redraw();
-	return;
 }
 
-static short FUN_00001b28(short param_1,short *param_2){
-	if (0 < param_2[0]) {
-		for(short i=1; i<=param_2[0]; ++i){
-			if (param_2[i] == param_1) {
-				return 1;
-			}
+inline bool board_model::worm_direction_is_valid_move(short direction){
+	if(!current_worm_valid_move_count) {
+		return false;
+	}
+	for(short i=0; i<current_worm_valid_move_count; ++i){
+		if (current_worm_valid_moves[i] == direction) {
+			return true;
 		}
 	}
-	return 0;
+	return false;
 }
 
-static void worm_rotate(BOARD_RENDER_T* board,short delta){
-	if (1 < array5adc[0]) {
-		v_hide_c(vdi_handle);
-		draw_worm(board,worm_position[current_worm],direction,0xf);
-		direction += delta;
-		short sVar2;
-		while(sVar2 = FUN_00001b28(direction,array5adc), sVar2 == 0) {
-			direction += delta;
-			if(direction>6){
-				direction=1;
-			}
-			if(direction<1){
-				direction=6;
-			}
+inline void board_model::worm_rotate(short delta){
+	current_worm_direction += delta;
+	while(!worm_direction_is_valid_move(current_worm_direction)){
+		current_worm_direction += delta;
+		if(current_worm_direction>6){
+			current_worm_direction=1;
 		}
-		draw_worm(board,worm_position[current_worm],direction,current_worm);
-		v_show_c(vdi_handle,1);
-		board->worm_flash=1;
+		if(current_worm_direction<1){
+			current_worm_direction=6;
+		}
 	}
 }
 
-static short handle_key_event(BOARD_RENDER_T* board,short event){
+inline void board_render::worm_rotate(short delta){
+	if(model.current_worm_valid_move_count>2){
+		short worm=model.get_current_worm();
+		v_hide_c(vdi);
+		worm_draw(model.get_worm_pos(worm),model.current_worm_direction-1,-1);
+		model.worm_rotate(delta);
+		worm_draw(model.get_worm_pos(worm),model.current_worm_direction-1,worm);
+		v_show_c(vdi,1);
+		worm_flash=1;
+	}
+}
+
+inline bool board_render::key_event(short event){
 	// high byte is scancode
 	switch(event&0xff00){
 		case 0x1c00:	// Return
 		case 0x7200:	// Enter (keypad)
-			if (runmode != 2) {
+			if (model.get_runmode() != 2) {
 				set_runmode(1);
 			}
 			break;
 		case 0x4b00:	// Left arrow
-			worm_rotate(board,1);
+			worm_rotate(1);
 			break;
 		case 0x4d00:	// Right arrow
-			worm_rotate(board,-1);
+			worm_rotate(-1);
 			break;
 		case 0x6100:	// Undo
-			return 1;
+			return true;
 	}
-	return 0;
+	return false;
 }
 
-static void menu_option_worm(short worm,short menu_item){
+static void menu_option_worm(
+		board_render* board, short worm, short menu_item){
+	short current_worm=board->model.get_current_worm();
 	switch(menu_item) {
 		case 0x23:	// Reset User Mode
-			worm_reset_brain(worm);
+			board->model.worm_reset_brain(worm);
 		case 0x22:	// User Mode
-			set_worm_mode(worm,1);
+			board->set_worm_mode(worm,1);
 			if (worm == current_worm) {
-				set_runmode(0);
+				board->set_runmode(0);
 			}
 			break;
 		case 0x26:	// Reset Wild Mode
-			worm_reset_brain(worm);
+			board->model.worm_reset_brain(worm);
 		case 0x25:	// Wild Mode
-			set_worm_mode(worm,2);
+			board->set_worm_mode(worm,2);
 			if (worm == current_worm) {
-				set_runmode(1);
+				board->set_runmode(1);
 			}
 			break;
 		case 0x28:	// Off
-			set_worm_mode(worm,0);
+			board->set_worm_mode(worm,0);
 			if (worm == current_worm) {
-				FUN_00001578();
+				board->model.next_worm();
 			}
 	}
 }
 
-static short menu_option_selected(short me_ntitle,short menu_item){
+static short menu_option_selected(
+		board_render* board, short me_ntitle, short menu_item){
 	menu_tnormal(menu,me_ntitle,1);
 	switch(me_ntitle) {
 		case 3:
-			break;
+			if(menu_item==0xb){
+				do_about_dialog();
+			}
+			return 0;
 		case 4: 
 			switch(menu_item) {
-				case 0x14:
-					board_reset();
+				case 0x14:	// Demo
+					board->reset();
 					for(short worm=0; worm<4; ++worm){
-						worm_reset_brain(worm);
-						set_worm_mode(worm,2);
+						board->model.worm_reset_brain(worm);
+						board->set_worm_mode(worm,2);
 					}
-					set_runmode(1);
-					current_worm = 0xffff;
-					FUN_00001578();
+					board->set_runmode(1);
+					board->model.set_current_worm(-1);
+					board->model.next_worm();
 					return 0;
-				case 0x15:
-					board_reset();
-					set_runmode(1);
-					current_worm = 0xffff;
-					FUN_00001578();
+				case 0x15:	// New Board
+					board->reset();
+					board->set_runmode(1);
+					board->model.set_current_worm(-1);
+					board->model.next_worm();
 					return 0;
-				case 0x16:
-					board_reset();
+				case 0x16:	// Reset All
+					board->reset();
 					for(short worm=0; worm<4; ++worm) {
-						worm_reset_brain(worm);
+						board->model.worm_reset_brain(worm);
 					}
-					set_runmode(1);
-					current_worm = 0xffff;
-					FUN_00001578();
+					board->set_runmode(1);
+					board->model.set_current_worm(-1);
+					board->model.next_worm();
 					return 0;
-				case 0x17:
+				case 0x17:	// Quit
 					return 1;
+				case 0x19:	// Halt
+					if (board->model.get_runmode() != 2) {
+						board->set_runmode(0);
+					}
+					return 0;
+				case 0x1a:	// Run
+					if (board->model.get_runmode() != 2) {
+						board->set_runmode(1);
+					}
+					return 0;
+				case 0x1c:	// Fast
+				case 0x1d:	// Medium
+				case 0x1e:	// Slow
+					board->set_speed(menu_item-0x1c);
+					return 0;
+				case 0x20:	//	Sound
+					set_soundflag(!soundflag);
+					return 0;
 				default:
-					return 0;
-				case 0x19:
-					if (runmode != 2) {
-						set_runmode(0);
-					}
-					return 0;
-				case 0x1a:
-					if (runmode != 2) {
-						set_runmode(1);
-					}
-					return 0;
-				case 0x1c:
-				case 0x1d:
-				case 0x1e:
-					set_speed(menu_item-0x1c);
-					return 0;
-				case 0x20:
-					soundflag = !soundflag;
-					menu_icheck(menu,0x20,soundflag);
 					return 0;
 			}
 		case 5:
-			menu_option_worm(0,menu_item);
-			return 0;
 		case 6:
-			menu_option_worm(1,menu_item-8);
-			return 0;
 		case 7:
-			menu_option_worm(2,menu_item-16);
-			return 0;
 		case 8:
-			menu_option_worm(3,menu_item-24);
-		default:
-			return 0;
+			{
+				short worm=me_ntitle-5;
+				menu_option_worm(board,worm,menu_item-(8*worm));
+				return 0;
+			}
 	}
-	if (menu_item != 0xb) {
-		return 0;
-	}
-	do_about_dialog();
 	return 0;
 }
 
-static void handle_aes_events(BOARD_RENDER_T* board){
+static void handle_aes_events(board_render* board){
 	EVMULT_IN in={0};
 	EVMULT_OUT out={0};
 	short msgbuff[8];
-	short quit=0;
 	in.emi_flags=MU_KEYBD|MU_MESAG|MU_TIMER;
-	do{
-		in.emi_tlow=ev_mtcount;
+	while(1){
+		in.emi_tlow=board->ev_mtcount;
 		short event=evnt_multi_fast(&in,msgbuff,&out);
 		wind_update(1);
 		if(event & MU_KEYBD){
-			quit = handle_key_event(board,out.emo_kreturn);
-		}
-		if(event & MU_TIMER){
-			board_tick(board);
+			if(board->key_event(out.emo_kreturn)) return;
 		}
 		if(event & MU_MESAG){
 			switch(msgbuff[0]){
 				case MN_SELECTED:
-					quit = menu_option_selected(msgbuff[3],msgbuff[4]);
+					if(menu_option_selected(board,msgbuff[3],msgbuff[4])) return;
 					break;
 				case WM_REDRAW:
-				case WM_ONTOP:
-					board_redraw(board);
+				//case WM_ONTOP:
+					board->redraw();
 			}
 		}
+		if(event & MU_TIMER){
+			board->tick();
+		}
 		wind_update(0);
-	}while(!quit);
+	}
 }
 
-static short initialize(BOARD_RENDER_T* board){
-	if(appl_init()) return 0;
+inline void board_render::set_geometry(
+		short x1, short y1, short x2, short y2){
+	vrect.x1 = x1;
+	vrect.y1 = y1;
+	vrect.x2 = x2;
+	vrect.y2 = y2;
+	short w=x2-x1;
+	short h=y2-y1;
 
-	short gr_hwchar,gr_hhchar,gr_hwbox,gr_hhbox;
-	vdi_handle = graf_handle(&gr_hwchar,&gr_hhchar,&gr_hwbox,&gr_hhbox);
+	// these values derive from system font metrics
+	score_w=27;
+	score_h=(y1<16)?11:25;
+	score_textx=2;
+	score_texty=(y1<16)?8:18;
+	score_pad=78;
+	if(x2>319){	// high rez horizontal
+		score_w=35;
+		score_textx=6;
+		score_pad*=2;
+	}
+	
+	// cell width of 3 on 320 screen
+	cell_w=(short)w/88;
+	cell_h=(short)(h-score_h)/42;
+	pad_x=x1+(w-cell_w*78)/2; // center x
+	pad_y=y1+(h-score_h-cell_h*39)/2;	// center y
 
-	static short work_in[16],work_out[57];
-	for(short i=0; i<10; ++i)
-		work_in[i] = 1;
-	work_in[10] = 2;
-	v_opnvwk(work_in,&vdi_handle,work_out);
-	board->vrect.x1 = 0;
-	board->vrect.y1 = gr_hhbox;
-	board->vrect.x2 = work_out[0];
-	board->vrect.y2 = work_out[1];
-	board->colordepth = work_out[13];
+	// place scoreboard
+	score_x=(w-(score_w*4+(score_pad-score_w)*3))/2; // center x
+	score_y=pad_y+cell_h*40+(cell_h/2);
+	score_textx+=score_x;
+	score_texty+=score_y;
+}
+
+static bool initialize(board_render* board){
+	appl_init();
+	if(gl_apid==-1) return false;
 
 	if(!rsrc_load("NIGHT.RSC")){
-		form_alert(1,"[3][Fatal error !|Can't find the resorce|file NIGHT.RSC][ Abort ]");
-		return 0;
+		form_alert(1,"[3][| |Loading NIGHT.RSC failed.][ Quit ]");
+		return false;
 	}
 
-	board->delta.x1=40;
-	board->delta.y1=25;
-	board->delta.x2=12;
-	board->delta.y2=8;
+	short gr_hwchar,gr_hhchar,gr_hwbox,gr_hhbox;
+	short vdi=graf_handle(&gr_hwchar,&gr_hhchar,&gr_hwbox,&gr_hhbox);
 
-	board->score_x=30;
-	board->score_y=184;
-	board->score_w=28;
-	board->score_h=11;
-	board->score_textx=32;
-	board->score_texty=192;
-	board->score_pad=80;
+	short in[16],out[57];
+	for(short i=0; i<10; ++i)
+		in[i] = 1;
+	in[10] = 2;
+	v_opnvwk(in,&vdi,out);
 
-	short menu_index=1;
-	if(board->vrect.x2>319){	// high rez horizontal
-		board->delta.x1*=2;
-		board->delta.x2*=2;
-		board->score_x=68;
-		board->score_w=31;
-		board->score_textx=72;
-		board->score_pad*=2;
-		menu_index=0;
-	}
-	if(board->vrect.y2>199){	// high rez vertical
-		board->delta.y1*=2;
-		board->delta.y2*=2;
-		board->score_y=365;
-		board->score_h=27;
-		board->score_texty*=2;
-	}
+	rsrc_gaddr(R_TREE,out[13]>=16?3:2,&about_dialog);
+	rsrc_gaddr(R_TREE,out[0]>319?0:1,&menu);
+	menu_bar(menu,MENU_INSTALL);
 
-	if(rsrc_gaddr(R_TREE,menu_index,&menu))
-		menu_bar(menu,0x4644);
-	rsrc_gaddr(R_TREE,board->colordepth>=16?3:2,&about_dialog);
+	board->set_vdi(vdi,out[13]);
+	board->set_geometry(0,gr_hhbox,out[0],out[1]);
 
-	v_show_c(vdi_handle,0);
-	graf_mouse(0,0);
-
-	soundflag = 1;
-	menu_icheck(menu,0x20,1);
+	set_soundflag(1);
 	for(short i=0; i<4; ++i){
-		worm_reset_brain(i);
-		set_worm_mode(i,0);
+		board->model.worm_reset_brain(i);
+		board->set_worm_mode(i,0);
 	}
-	set_worm_mode(0,1);
-	board_reset();
-	current_worm = 0;
-	FUN_00001126();
-	set_speed(1);
-	set_runmode(0);
-	return 1;
+	board->set_worm_mode(0,1);
+	board->model.set_current_worm(0);
+	board->model.worm_generate_moves();
+	board->set_speed(1);
+	board->set_runmode(0);
+
+	graf_mouse(ARROW,0);
+	v_show_c(vdi,0);
+
+	redraw();
+	return true;
 }
 
-static void quit(void){
-	v_clsvwk(vdi_handle);
+static void quit(short vdi){
+	v_clsvwk(vdi);
 	appl_exit();
 	return;
 }
 
-int main(int argc, char *argv[]){
-	BOARD_RENDER_T board;
-	if(initialize(&board)){
-		handle_aes_events(&board);
+int main(void){
+	board_render board;
+	if(!initialize(&board)){
+		return 1;
 	}
-	quit();
+	handle_aes_events(&board);
+	quit(board.vdi);
 	return 0;
 }
