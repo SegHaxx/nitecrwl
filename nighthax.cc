@@ -73,9 +73,7 @@ class board_render{
 		void worm_tick(short,short);
 		void capture(short,short);
 		void worm_draw(short,short,short);
-		void worm_draw(short,short,short,short);
 		void worm_draw_get_line(VRECT*,short,short);
-		void worm_draw_get_line(VRECT*,short,short,short);
 		void worm_draw_vdi(short,void (*draw)(short));
 		void worm_draw_segment(VRECT*,short);
 		void worm_draw_box(VRECT*,short);
@@ -176,8 +174,7 @@ inline void board_model::worm_reset_brain(short worm){
 }
 
 inline void board_render::set_speed(short speed){
-	//static short speedtbl[]={50,150,500};
-	static short speedtbl[]={0,150,500};
+	static short speedtbl[]={50,150,500};
 	for(short i=0; i<3; ++i){
 		short flag=(speed==i);
 		if(flag){
@@ -186,27 +183,6 @@ inline void board_render::set_speed(short speed){
 		menu_icheck(menu,i+0x1c,flag);
 	}
 }
-
-typedef struct{
-    template<typename Tret, typename T>
-    static Tret lambda_ptr_exec(short data) {
-        return (Tret) (*(T*)fn<T>())(data);
-    }
-
-    template<typename Tret = void, typename Tfp = Tret(*)(short), typename T>
-    static Tfp ptr(T& t) {
-        fn<T>(&t);
-        return (Tfp) lambda_ptr_exec<Tret, T>;
-    }
-
-    template<typename T>
-    static void* fn(void* new_fn = nullptr) {
-        static void* fn;
-        if (new_fn != nullptr)
-            fn = new_fn;
-        return fn;
-    }
-} Lambda;
 
 inline void board_render::worm_draw_vdi(short worm,void (*draw)(short)){
 	vsl_width(vdi,colordepth<4||vrect.x2>319?3:1);
@@ -272,6 +248,27 @@ inline void board_render::worm_draw_vdi(short worm,void (*draw)(short)){
 	}
 }
 
+typedef struct{
+    template<typename Tret, typename T>
+    static Tret lambda_ptr_exec(short data) {
+        return (Tret) (*(T*)fn<T>())(data);
+    }
+
+    template<typename Tret = void, typename Tfp = Tret(*)(short), typename T>
+    static Tfp ptr(T& t) {
+        fn<T>(&t);
+        return (Tfp) lambda_ptr_exec<Tret, T>;
+    }
+
+    template<typename T>
+    static void* fn(void* new_fn = nullptr) {
+        static void* fn;
+        if (new_fn != nullptr)
+            fn = new_fn;
+        return fn;
+    }
+} Lambda;
+
 inline void board_render::worm_draw_segment(VRECT* line,short worm){
 	auto draw_line = [=] (short color) {
 		vsl_color(vdi,color);
@@ -321,7 +318,9 @@ inline void board_render::position_to_xy(short pos,short& x,short& y){
 }
 
 inline void board_render::worm_draw_get_line(
-		VRECT* line, short x, short y, short direction){
+		VRECT* line, short pos, short direction){
+	short x,y;
+	position_to_xy(pos,x,y);
 	line->x1 = x * cell_w*4 + pad_x;
 	line->y1 = y * cell_h*2 + pad_y;
 	if (y % 2 == 1) {
@@ -338,24 +337,10 @@ inline void board_render::worm_draw_get_line(
 	line->y2 = line->y1 + cell_h * direction_table[direction][1];
 }
 
-inline void board_render::worm_draw_get_line(
-		VRECT* line, short pos, short direction){
-	short x,y;
-	position_to_xy(pos,x,y);
-	worm_draw_get_line(line,x,y,direction);
-}
-
 inline void board_render::worm_draw(
 		short pos, short direction, short worm){
 	VRECT line;
 	worm_draw_get_line(&line,pos,direction);
-	worm_draw_segment(&line,worm);
-}
-
-inline void board_render::worm_draw(
-		short x, short y, short direction, short worm){
-	VRECT line;
-	worm_draw_get_line(&line,x,y,direction);
 	worm_draw_segment(&line,worm);
 }
 
@@ -524,6 +509,20 @@ inline void board_render::tick(){
 	model.next_worm();
 }
 
+static short FUN_000009e2(short pos){
+	if(pos < 1 || pos > 449){
+		return 0;
+	}
+	short sVar1 = pos % 45;
+	if(sVar1 < 1 || sVar1 > 43){
+		return 0;
+	}
+	if (sVar1 < 21 || sVar1 > 23) {
+		return 1;
+	}
+	return 0;
+}
+
 inline void board_render::redraw(){
 	vsf_interior(vdi,1);
 	vsf_color(vdi,1);
@@ -549,9 +548,8 @@ inline void board_render::redraw(){
 			v_pmarker(vdi,2,(short*)&ptsin);
 		}
 	}
-	for(short y=0; y<20; ++y){
-		for(short x=0; x<20; ++x){
-			short pos=x+y*22;
+	for(short pos=1; pos<451; ++pos){
+		if(FUN_000009e2(pos)){
 			if(model.state_all[pos]){
 				for(short worm=0; worm<4; ++worm){
 
@@ -566,7 +564,6 @@ inline void board_render::redraw(){
 						}
 					};
 					worm_draw_vdi(worm,Lambda::ptr(draw_cell));
-
 				}
 			}
 		}
