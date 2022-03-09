@@ -45,10 +45,10 @@ SHL int16_t vdi_if(
 }
 
 SHL void v_pline(int16_t handle,int16_t count,int16_t *pxyarray){
-	for(int16_t i=0;i<count*2;++i){
-		ptsin[i] = pxyarray[i];
-	}
+	int16_t* prev=pblock.ptsin;
+	pblock.ptsin=pxyarray;
 	vdi_if(6,count,0,handle);
+	pblock.ptsin=prev;
 }
 
 SHL void v_pmarker(int16_t handle,int16_t count,int16_t *pxyarray){
