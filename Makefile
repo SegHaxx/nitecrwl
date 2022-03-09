@@ -1,19 +1,25 @@
-#CPP=m68k-atari-mint-g++-4.6.4
-CPP=m68k-atari-mint-g++
-CFLAGS=-std=gnu++0x -Wall -Wno-unused-value -Os #-mpcrel
-LDFLAGS=-Wl,--traditional-format -lgem
+PREFIX=m68k-atari-mint
+CPP=$(PREFIX)-g++
+#CPP=$(PREFIX)-g++-4.6.4
 
-LIBCMINI_DIR=/home/seg/src/libcmini/build
-LINK=-nostdlib $(LIBCMINI_DIR)/crt0.o $< -L$(LIBCMINI_DIR) $(LDFLAGS) -lcmini -lgcc -o $@
+CFLAGS=-std=gnu++0x -Wall -Wno-unused-value -Os -mshort #-mpcrel
+
+LIBCMINI_DIR=$(HOME)/src/libcmini/build
+LINK=-nostdlib $(LIBCMINI_DIR)/crt0.o $< -L$(LIBCMINI_DIR)/mshort $(LDFLAGS) -lcmini -lgcc -o $@
 #LINK=$< $(LDFLAGS) -o $@
 
-all: nighthax.prg
+TARGETS=nighthax.prg
 
-nighthax.prg: nighthax.cc Makefile
-	$(CPP) $(CFLAGS) -march=68000 -mtune=68020-40 $(LINK)
-	m68k-atari-mint-strip --strip-unneeded -R .comment -R .note -R .note.ABI-tag $@
+src = $(wildcard *.cc)
+obj = $(src:.cc=.o)
 
-.PHONY: clean
-
+.PHONY: all clean
+all: $(TARGETS)
 clean:
-	rm -f nighthax.prg
+	rm -f $(TARGETS) $(obj)
+
+nighthax.prg: nighthax.cc
+	$(CPP) $(CFLAGS) $(LINK)
+	$(PREFIX)-objdump -drwC $@ > $@.s
+	$(PREFIX)-strip --strip-unneeded -R .comment -R .note -R .note.ABI-tag $@
+	$(PREFIX)-size $@

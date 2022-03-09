@@ -1,13 +1,16 @@
-#include <gem.h>
 #include <osbind.h>
+
+#include "aes.h"
+#include "vdi.h"
+
 //#include <stdio.h>
 //using namespace std;
 
 typedef struct{
-	short x1;
-	short y1;
-	short x2;
-	short y2;
+	int16_t x1;
+	int16_t y1;
+	int16_t x2;
+	int16_t y2;
 } VRECT;
 
 class board_model{
@@ -16,31 +19,31 @@ class board_model{
 		void reset();
 		void worm_generate_moves(void);
 		void next_worm(void);
-		bool worm_direction_is_valid_move(short);
-		void worm_reset_brain(short);
-		void worm_tick(short,short);
-		void capture(short,short);
-		void worm_rotate(short);
+		bool worm_direction_is_valid_move(int16_t);
+		void worm_reset_brain(int16_t);
+		void worm_tick(int16_t,int16_t);
+		void capture(int16_t,int16_t);
+		void worm_rotate(int16_t);
 
-		void set_runmode(short mode){runmode=mode;};
-		short get_runmode(){return runmode;};
-		void set_worm_pos(short worm,short pos){worm_position[worm]=pos;};
-		short get_worm_pos(short worm){return worm_position[worm];};
-		void set_worm_mode(short worm,short mode){worm_mode[worm]=mode;};
-		void set_current_worm(short worm){current_worm=worm;};
-		short get_current_worm(){return current_worm;};
-		short get_worm_score(short worm){return worm_score[worm];};
+		void set_runmode(int16_t mode){runmode=mode;};
+		int16_t get_runmode(){return runmode;};
+		void set_worm_pos(int16_t worm,int16_t pos){worm_position[worm]=pos;};
+		int16_t get_worm_pos(int16_t worm){return worm_position[worm];};
+		void set_worm_mode(int16_t worm,int16_t mode){worm_mode[worm]=mode;};
+		void set_current_worm(int16_t worm){current_worm=worm;};
+		int16_t get_current_worm(){return current_worm;};
+		int16_t get_worm_score(int16_t worm){return worm_score[worm];};
 
-		short current_worm_valid_move_count;
-		short current_worm_direction;
+		int16_t current_worm_valid_move_count;
+		int16_t current_worm_direction;
 	private:
-		short runmode;
-		short current_worm;
-		short worm_score[4];
-		short worm_position[4];
-		short worm_mode[4];
-		short current_worm_valid_moves[6];
-		short worm_brain[4][64];
+		int16_t runmode;
+		int16_t current_worm;
+		int16_t worm_score[4];
+		int16_t worm_position[4];
+		int16_t worm_mode[4];
+		int16_t current_worm_valid_moves[6];
+		int16_t worm_brain[4][64];
 	public:
 		unsigned char state[450][4];
 		unsigned char state_all[450];
@@ -48,37 +51,37 @@ class board_model{
 
 class board_render{
 	public:
-		short vdi;
-		short ev_mtcount;
-		void set_vdi(short v,short c){vdi=v;colordepth=c;};
-		void set_geometry(short,short,short,short);
-		void set_worm_mode(short,short);
-		void set_runmode(short);
-		void set_speed(short);
+		int16_t vdi;
+		int16_t ev_mtcount;
+		void set_vdi(int16_t v,int16_t c){vdi=v;colordepth=c;};
+		void set_geometry(int16_t,int16_t,int16_t,int16_t);
+		void set_worm_mode(int16_t,int16_t);
+		void set_runmode(int16_t);
+		void set_speed(int16_t);
 		void reset();
 		void redraw();
 		void tick();
-		bool key_event(short);
-		void worm_rotate(short);
+		bool key_event(int16_t);
+		void worm_rotate(int16_t);
 	private:
 		VRECT vrect;
-		short colordepth;
-		short pad_x,pad_y;
-		short cell_w,cell_h;
-		short score_x,score_y;
-		short score_w,score_h;
-		short score_pad;
-		short score_textx,score_texty;
-		short worm_flash;
-		void worm_tick(short,short);
-		void capture(short,short);
-		void worm_draw(short,short,short);
-		void worm_draw_get_line(VRECT*,short,short);
-		void worm_draw_vdi(short,void (*draw)(short));
-		void worm_draw_segment(VRECT*,short);
-		void worm_draw_box(VRECT*,short);
-		void worm_draw_score(short);
-		void position_to_xy(short,short&,short&);
+		int16_t colordepth;
+		int16_t pad_x,pad_y;
+		int16_t cell_w,cell_h;
+		int16_t score_x,score_y;
+		int16_t score_w,score_h;
+		int16_t score_pad;
+		int16_t score_textx,score_texty;
+		int16_t worm_flash;
+		void worm_tick(int16_t,int16_t);
+		void capture(int16_t,int16_t);
+		void worm_draw(int16_t,int16_t,int16_t);
+		void worm_draw_get_line(VRECT*,int16_t,int16_t);
+		void worm_draw_vdi(int16_t,void (*draw)(int16_t));
+		void worm_draw_segment(VRECT*,int16_t);
+		void worm_draw_box(VRECT*,int16_t);
+		void worm_draw_score(int16_t);
+		void position_to_xy(int16_t,int16_t&,int16_t&);
 	public:
 		board_model model;
 };
@@ -88,9 +91,9 @@ static OBJECT* about_dialog;
 
 static bool soundflag;
 
-inline void board_render::set_runmode(short mode){
+inline void board_render::set_runmode(int16_t mode){
 	model.set_runmode(mode);
-	short flag=0;
+	int16_t flag=0;
 	switch(mode){
 		case 0:
 			break;
@@ -106,7 +109,7 @@ inline void board_render::set_runmode(short mode){
 }
 
 inline void board_model::worm_generate_moves(void){
-	short direction = worm_brain[current_worm][state_all[worm_position[current_worm]]];
+	int16_t direction = worm_brain[current_worm][state_all[worm_position[current_worm]]];
 	if(direction){	// go in learned direction
 		current_worm_valid_move_count = 1;
 		current_worm_valid_moves[0] = direction;
@@ -115,8 +118,8 @@ inline void board_model::worm_generate_moves(void){
 	}
 	// enumerate valid moves
 	current_worm_valid_move_count = 0;
-	short state = state_all[worm_position[current_worm]];
-	for(short direction=1; direction<7; ++direction){
+	int16_t state = state_all[worm_position[current_worm]];
+	for(int16_t direction=1; direction<7; ++direction){
 		if(state % 2 == 0){
 			current_worm_valid_moves[current_worm_valid_move_count] = direction;
 			++current_worm_valid_move_count;
@@ -125,13 +128,13 @@ inline void board_model::worm_generate_moves(void){
 	}
 	// pick a random valid move
 	if(current_worm_valid_move_count){
-		short rnd = Random() % current_worm_valid_move_count;
+		int16_t rnd = Random() % current_worm_valid_move_count;
 		current_worm_direction = current_worm_valid_moves[rnd];
 	}
 }
 
 inline void board_model::next_worm(void){
-	short start_worm = current_worm;
+	int16_t start_worm = current_worm;
 	while ((current_worm = (current_worm + 1) % 4,
 				worm_mode[current_worm] < 1 ||
 				(state_all[worm_position[current_worm]] == 0x3f))) {
@@ -151,17 +154,17 @@ inline void board_model::next_worm(void){
 	set_runmode(0);
 }
 
-inline void board_render::set_worm_mode(short worm,short mode){
+inline void board_render::set_worm_mode(int16_t worm,int16_t mode){
 	model.set_worm_mode(worm,mode);
 	static char worm_menu_indexes[4]={0x22,0x2a,0x32,0x3a};
-	short me_citem = worm_menu_indexes[worm];
+	int16_t me_citem = worm_menu_indexes[worm];
 	menu_icheck(menu,me_citem  ,mode==1);
 	menu_icheck(menu,me_citem+3,mode==2);
 	menu_icheck(menu,me_citem+6,mode==0);
 }
 
-inline void board_model::worm_reset_brain(short worm){
-	for(short i=0; i<64; ++i){
+inline void board_model::worm_reset_brain(int16_t worm){
+	for(int16_t i=0; i<64; ++i){
 		worm_brain[worm][i] = 0;
 	}
 	worm_brain[worm][31] = 6;
@@ -173,10 +176,10 @@ inline void board_model::worm_reset_brain(short worm){
 	worm_brain[worm][63] = 7;
 }
 
-inline void board_render::set_speed(short speed){
-	static short speedtbl[]={50,150,500};
-	for(short i=0; i<3; ++i){
-		short flag=(speed==i);
+inline void board_render::set_speed(int16_t speed){
+	static int16_t speedtbl[]={50,150,500};
+	for(int16_t i=0; i<3; ++i){
+		int16_t flag=(speed==i);
 		if(flag){
 			ev_mtcount=speedtbl[i];
 		}
@@ -184,7 +187,7 @@ inline void board_render::set_speed(short speed){
 	}
 }
 
-inline void board_render::worm_draw_vdi(short worm,void (*draw)(short)){
+inline void board_render::worm_draw_vdi(int16_t worm,void (*draw)(int16_t)){
 	vsl_width(vdi,colordepth<4||vrect.x2>319?3:1);
 	if(colordepth>=16){
 		vsl_ends(vdi,2,2);
@@ -193,7 +196,7 @@ inline void board_render::worm_draw_vdi(short worm,void (*draw)(short)){
 	}
 	vsl_ends(vdi,0,0);
 	if(colordepth>=4){
-		short color=3;
+		int16_t color=3;
 		switch(worm){
 			case -2:
 				draw(0);
@@ -220,7 +223,7 @@ inline void board_render::worm_draw_vdi(short worm,void (*draw)(short)){
 		}
 		return;
 	}
-	short color=0;
+	int16_t color=0;
 	switch(worm){
 		case -2:
 			draw(0);
@@ -250,11 +253,11 @@ inline void board_render::worm_draw_vdi(short worm,void (*draw)(short)){
 
 typedef struct{
     template<typename Tret, typename T>
-    static Tret lambda_ptr_exec(short data) {
+    static Tret lambda_ptr_exec(int16_t data) {
         return (Tret) (*(T*)fn<T>())(data);
     }
 
-    template<typename Tret = void, typename Tfp = Tret(*)(short), typename T>
+    template<typename Tret = void, typename Tfp = Tret(*)(int16_t), typename T>
     static Tfp ptr(T& t) {
         fn<T>(&t);
         return (Tfp) lambda_ptr_exec<Tret, T>;
@@ -269,18 +272,18 @@ typedef struct{
     }
 } Lambda;
 
-inline void board_render::worm_draw_segment(VRECT* line,short worm){
-	auto draw_line = [=] (short color) {
+inline void board_render::worm_draw_segment(VRECT* line,int16_t worm){
+	auto draw_line = [=] (int16_t color) {
 		vsl_color(vdi,color);
-		v_pline(vdi,2,(short*)line);
+		v_pline(vdi,2,(int16_t*)line);
 	};
 	worm_draw_vdi(worm,Lambda::ptr(draw_line));
 }
 
-inline void board_render::worm_draw_box(VRECT* rect,short worm){
-	auto draw_box = [=] (short color) {
+inline void board_render::worm_draw_box(VRECT* rect,int16_t worm){
+	auto draw_box = [=] (int16_t color) {
 		vsl_color(vdi,color);
-		short ptsin[4];
+		int16_t ptsin[4];
 		ptsin[0]=rect->x1;
 		ptsin[1]=rect->y1;
 		ptsin[2]=rect->x2;
@@ -305,7 +308,7 @@ inline void board_render::worm_draw_box(VRECT* rect,short worm){
 	worm_draw_vdi(worm,Lambda::ptr(draw_box));
 }
 
-inline void board_render::position_to_xy(short pos,short& x,short& y){
+inline void board_render::position_to_xy(int16_t pos,int16_t& x,int16_t& y){
 	x = pos % 45;
 	if (x > 22) {
 		x -= 23;
@@ -318,8 +321,8 @@ inline void board_render::position_to_xy(short pos,short& x,short& y){
 }
 
 inline void board_render::worm_draw_get_line(
-		VRECT* line, short pos, short direction){
-	short x,y;
+		VRECT* line, int16_t pos, int16_t direction){
+	int16_t x,y;
 	position_to_xy(pos,x,y);
 	line->x1 = x * cell_w*4 + pad_x;
 	line->y1 = y * cell_h*2 + pad_y;
@@ -338,17 +341,17 @@ inline void board_render::worm_draw_get_line(
 }
 
 inline void board_render::worm_draw(
-		short pos, short direction, short worm){
+		int16_t pos, int16_t direction, int16_t worm){
 	VRECT line;
 	worm_draw_get_line(&line,pos,direction);
 	worm_draw_segment(&line,worm);
 }
 
-inline void board_render::worm_draw_score(short worm){
-	short score = model.get_worm_score(worm);
+inline void board_render::worm_draw_score(int16_t worm){
+	int16_t score = model.get_worm_score(worm);
 	char str[4];
 	str[3]='\0';
-	for(short i=2; i>=0; --i){
+	for(int16_t i=2; i>=0; --i){
 		str[i] = score%10+'0';
 		if(score==0){
 			str[i]=' ';
@@ -393,7 +396,7 @@ static void sound_play_win_chord(void){
 	sound_play(chord);
 }
 
-static void sound_play_note(short note){
+static void sound_play_note(int16_t note){
 	unsigned char notetbl[6][5]={
 		{0xdd,0x80,1,0x81,0xff},
 		{0x7b,0x80,1,0x81,0xff},
@@ -415,38 +418,38 @@ static void sound_play_note(short note){
 }
 
 static void sound_play_death(void){
-	for(short note=5; note>=0; --note){
+	for(int16_t note=5; note>=0; --note){
 		sound_play_note(note);
 		evnt_timer(0x32);
 	}
 }
 
-inline void board_model::capture(short worm_pos,short worm){
+inline void board_model::capture(int16_t worm_pos,int16_t worm){
 	state[worm_pos][worm] = 0x3f;
 	++worm_score[worm];
 }
 
-inline void board_render::capture(short worm_pos,short worm){
+inline void board_render::capture(int16_t worm_pos,int16_t worm){
 	sound_play_win_chord();
 	model.capture(worm_pos,worm);
 	worm_draw_score(worm);
 	v_hide_c(vdi);
-	for(short direction=0; direction<6; ++direction){
+	for(int16_t direction=0; direction<6; ++direction){
 		worm_draw(worm_pos,direction,-2);
 	}
 	evnt_timer(3);
-	for(short direction=0; direction<6; ++direction){
+	for(int16_t direction=0; direction<6; ++direction){
 		worm_draw(worm_pos,direction,worm);
 	}
 	v_show_c(vdi,1);
 }
 
-inline void board_model::worm_tick(short worm,short direction){
+inline void board_model::worm_tick(int16_t worm,int16_t direction){
 	worm_brain[worm][state_all[worm_position[worm]]] = direction+1;
 }
 
-inline void board_render::worm_tick(short worm,short direction){
-	short worm_pos=model.get_worm_pos(worm);
+inline void board_render::worm_tick(int16_t worm,int16_t direction){
+	int16_t worm_pos=model.get_worm_pos(worm);
 	model.worm_tick(worm, direction);
 	model.state_all[worm_pos]   += 1<<direction;
 	model.state[worm_pos][worm] += 1<<direction;
@@ -469,7 +472,7 @@ inline void board_render::worm_tick(short worm,short direction){
 	if (worm_pos < 0) {
 		worm_pos += 450;
 	}
-	short sVar1 = worm_pos % 45;
+	int16_t sVar1 = worm_pos % 45;
 	if ((sVar1 == 0) || (sVar1 == 23)) {
 		worm_pos += 20;
 	}
@@ -495,7 +498,7 @@ inline void board_render::worm_tick(short worm,short direction){
 }
 
 inline void board_render::tick(){
-	short worm=model.get_current_worm();
+	int16_t worm=model.get_current_worm();
 	if((model.get_runmode() == 0) || (model.get_runmode() == 2)){
 		if(model.current_worm_valid_move_count){
 			v_hide_c(vdi);
@@ -509,11 +512,11 @@ inline void board_render::tick(){
 	model.next_worm();
 }
 
-static short FUN_000009e2(short pos){
+static int16_t FUN_000009e2(int16_t pos){
 	if(pos < 1 || pos > 449){
 		return 0;
 	}
-	short sVar1 = pos % 45;
+	int16_t sVar1 = pos % 45;
 	if(sVar1 < 1 || sVar1 > 43){
 		return 0;
 	}
@@ -527,8 +530,8 @@ inline void board_render::redraw(){
 	vsf_interior(vdi,1);
 	vsf_color(vdi,1);
 	v_hide_c(vdi);
-	vr_recfl(vdi,(short*)&vrect);
-	for(short worm=0; worm<4; ++worm){
+	vr_recfl(vdi,(int16_t*)&vrect);
+	for(int16_t worm=0; worm<4; ++worm){
 		VRECT rect;
 		rect.x1=score_pad * worm + score_x;
 		rect.y1=score_y;
@@ -538,28 +541,28 @@ inline void board_render::redraw(){
 		worm_draw_score(worm);
 	}
 	vsm_color(vdi,0);
-	for(short y=0; y<20; y+=2) {
-		for(short x=0; x<20; ++x){
+	for(int16_t y=0; y<20; y+=2) {
+		for(int16_t x=0; x<20; ++x){
 			VRECT ptsin;
 			ptsin.x1 = pad_x + x * cell_w*4;
 			ptsin.y1 = pad_y + y * cell_h*2;
 			ptsin.x2 = pad_x + x * cell_w*4 + cell_w*2;
 			ptsin.y2 = pad_y + (y + 1) * cell_h*2;
-			v_pmarker(vdi,2,(short*)&ptsin);
+			v_pmarker(vdi,2,(int16_t*)&ptsin);
 		}
 	}
-	for(short pos=1; pos<451; ++pos){
+	for(int16_t pos=1; pos<451; ++pos){
 		if(FUN_000009e2(pos)){
 			if(model.state_all[pos]){
-				for(short worm=0; worm<4; ++worm){
+				for(int16_t worm=0; worm<4; ++worm){
 
-					auto draw_cell = [=] (short color) {
+					auto draw_cell = [=] (int16_t color) {
 						vsl_color(vdi,color);
-						for(short direction=0; direction<6; direction++){
+						for(int16_t direction=0; direction<6; direction++){
 							if(model.state[pos][worm] & 1<<direction){
 								VRECT line;
 								worm_draw_get_line(&line,pos,direction);
-								v_pline(vdi,2,(short*)&line);
+								v_pline(vdi,2,(int16_t*)&line);
 							}
 						}
 					};
@@ -573,15 +576,15 @@ inline void board_render::redraw(){
 
 // queue an AES redraw message
 static void redraw(void){
-	short msg[8];
+	int16_t msg[8];
 	msg[0]=WM_REDRAW;
 	msg[1]=gl_apid;
 	//msg[2]=0;
 	appl_write(gl_apid,16,&msg);
 }
 
-static void dialog_reset_button(OBJECT* obj,short param_2){
-	((short*)obj)[param_2 * 0xc + 5] &= 0xfffe;
+static void dialog_reset_button(OBJECT* obj,int16_t param_2){
+	((int16_t*)obj)[param_2 * 0xc + 5] &= 0xfffe;
 }
 
 static void do_about_dialog(void){
@@ -599,14 +602,14 @@ static void do_about_dialog(void){
 }
 
 inline void board_model::reset(){
-	for(short i=0; i<450; ++i){
+	for(int16_t i=0; i<450; ++i){
 		state_all[i] = 0;
-		for(short worm=0; worm<4; ++worm){
+		for(int16_t worm=0; worm<4; ++worm){
 			state[i][worm] = 0;
 			//__asm__ volatile("" : "+g" (i) : :); // prevent optimization
 		}
 	}
-	for(short worm=0; worm<4; ++worm){
+	for(int16_t worm=0; worm<4; ++worm){
 		worm_score[worm] = 0;
 		worm_position[worm] = 0xd5;
 	}
@@ -618,11 +621,11 @@ inline void board_render::reset(){
 	redraw();
 }
 
-inline bool board_model::worm_direction_is_valid_move(short direction){
+inline bool board_model::worm_direction_is_valid_move(int16_t direction){
 	if(!current_worm_valid_move_count) {
 		return false;
 	}
-	for(short i=0; i<current_worm_valid_move_count; ++i){
+	for(int16_t i=0; i<current_worm_valid_move_count; ++i){
 		if (current_worm_valid_moves[i] == direction) {
 			return true;
 		}
@@ -630,7 +633,7 @@ inline bool board_model::worm_direction_is_valid_move(short direction){
 	return false;
 }
 
-inline void board_model::worm_rotate(short delta){
+inline void board_model::worm_rotate(int16_t delta){
 	current_worm_direction += delta;
 	while(!worm_direction_is_valid_move(current_worm_direction)){
 		current_worm_direction += delta;
@@ -643,9 +646,9 @@ inline void board_model::worm_rotate(short delta){
 	}
 }
 
-inline void board_render::worm_rotate(short delta){
+inline void board_render::worm_rotate(int16_t delta){
 	if(model.current_worm_valid_move_count>2){
-		short worm=model.get_current_worm();
+		int16_t worm=model.get_current_worm();
 		v_hide_c(vdi);
 		worm_draw(model.get_worm_pos(worm),model.current_worm_direction-1,-1);
 		model.worm_rotate(delta);
@@ -655,7 +658,7 @@ inline void board_render::worm_rotate(short delta){
 	}
 }
 
-inline bool board_render::key_event(short event){
+inline bool board_render::key_event(int16_t event){
 	// high byte is scancode
 	switch(event&0xff00){
 		case 0x1c00:	// Return
@@ -677,8 +680,8 @@ inline bool board_render::key_event(short event){
 }
 
 static void menu_option_worm(
-		board_render* board, short worm, short menu_item){
-	short current_worm=board->model.get_current_worm();
+		board_render* board, int16_t worm, int16_t menu_item){
+	int16_t current_worm=board->model.get_current_worm();
 	switch(menu_item) {
 		case 0x23:	// Reset User Mode
 			board->model.worm_reset_brain(worm);
@@ -704,8 +707,8 @@ static void menu_option_worm(
 	}
 }
 
-static short menu_option_selected(
-		board_render* board, short me_ntitle, short menu_item){
+static int16_t menu_option_selected(
+		board_render* board, int16_t me_ntitle, int16_t menu_item){
 	menu_tnormal(menu,me_ntitle,1);
 	switch(me_ntitle) {
 		case 3:
@@ -717,7 +720,7 @@ static short menu_option_selected(
 			switch(menu_item) {
 				case 0x14:	// Demo
 					board->reset();
-					for(short worm=0; worm<4; ++worm){
+					for(int16_t worm=0; worm<4; ++worm){
 						board->model.worm_reset_brain(worm);
 						board->set_worm_mode(worm,2);
 					}
@@ -733,7 +736,7 @@ static short menu_option_selected(
 					return 0;
 				case 0x16:	// Reset All
 					board->reset();
-					for(short worm=0; worm<4; ++worm) {
+					for(int16_t worm=0; worm<4; ++worm) {
 						board->model.worm_reset_brain(worm);
 					}
 					board->set_runmode(1);
@@ -768,7 +771,7 @@ static short menu_option_selected(
 		case 7:
 		case 8:
 			{
-				short worm=me_ntitle-5;
+				int16_t worm=me_ntitle-5;
 				menu_option_worm(board,worm,menu_item-(8*worm));
 				return 0;
 			}
@@ -779,11 +782,11 @@ static short menu_option_selected(
 static void handle_aes_events(board_render* board){
 	EVMULT_IN in={0};
 	EVMULT_OUT out={0};
-	short msgbuff[8];
+	int16_t msgbuff[8];
 	in.emi_flags=MU_KEYBD|MU_MESAG|MU_TIMER;
 	while(1){
 		in.emi_tlow=board->ev_mtcount;
-		short event=evnt_multi_fast(&in,msgbuff,&out);
+		int16_t event=evnt_multi_fast(&in,msgbuff,&out);
 		wind_update(1);
 		if(event & MU_KEYBD){
 			if(board->key_event(out.emo_kreturn)) return;
@@ -806,13 +809,13 @@ static void handle_aes_events(board_render* board){
 }
 
 inline void board_render::set_geometry(
-		short x1, short y1, short x2, short y2){
+		int16_t x1, int16_t y1, int16_t x2, int16_t y2){
 	vrect.x1 = x1;
 	vrect.y1 = y1;
 	vrect.x2 = x2;
 	vrect.y2 = y2;
-	short w=x2-x1;
-	short h=y2-y1;
+	int16_t w=x2-x1;
+	int16_t h=y2-y1;
 
 	// these values derive from system font metrics
 	score_w=27;
@@ -827,8 +830,8 @@ inline void board_render::set_geometry(
 	}
 	
 	// cell width of 3 on 320 screen
-	cell_w=(short)w/88;
-	cell_h=(short)(h-score_h)/42;
+	cell_w=(int16_t)w/88;
+	cell_h=(int16_t)(h-score_h)/42;
 	pad_x=x1+(w-cell_w*78)/2; // center x
 	pad_y=y1+(h-score_h-cell_h*39)/2;	// center y
 
@@ -848,11 +851,11 @@ static bool initialize(board_render* board){
 		return false;
 	}
 
-	short gr_hwchar,gr_hhchar,gr_hwbox,gr_hhbox;
-	short vdi=graf_handle(&gr_hwchar,&gr_hhchar,&gr_hwbox,&gr_hhbox);
+	int16_t gr_hwchar,gr_hhchar,gr_hwbox,gr_hhbox;
+	int16_t vdi=graf_handle(&gr_hwchar,&gr_hhchar,&gr_hwbox,&gr_hhbox);
 
-	short in[16],out[57];
-	for(short i=0; i<10; ++i)
+	int16_t in[16],out[57];
+	for(int16_t i=0; i<10; ++i)
 		in[i] = 1;
 	in[10] = 2;
 	v_opnvwk(in,&vdi,out);
@@ -865,7 +868,7 @@ static bool initialize(board_render* board){
 	board->set_geometry(0,gr_hhbox,out[0],out[1]);
 
 	set_soundflag(1);
-	for(short i=0; i<4; ++i){
+	for(int16_t i=0; i<4; ++i){
 		board->model.worm_reset_brain(i);
 		board->set_worm_mode(i,0);
 	}
@@ -882,7 +885,7 @@ static bool initialize(board_render* board){
 	return true;
 }
 
-static void quit(short vdi){
+static void quit(int16_t vdi){
 	v_clsvwk(vdi);
 	appl_exit();
 	return;
